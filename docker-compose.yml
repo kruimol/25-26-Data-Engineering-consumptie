@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: energie_db
+    restart: always
+    env_file: .env
+    # We koppelen jouw PG variabelen aan de variabelen die de Postgres container verwacht
+    environment:
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      POSTGRES_DB: ${PGDATABASE}
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Zorgt ervoor dat de app pas start als de database écht klaar is om connecties te ontvangen
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: energie_pgadmin
+    restart: always
+    depends_on:
+      - db
+    env_file: .env
+    ports:
+      - "5050:80" # Je pgAdmin is straks bereikbaar op http://localhost:5050
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  app:
+    build: .
+    container_name: energie_pipeline
+    env_file: .env
+    # Overschrijf de host zodat de app binnen het Docker netwerk naar 'db' zoekt ipv 'localhost'
+    environment:
+      - PGHOST=db
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount je huidige map naar /app in de container. 
+      # Zo hoef je Docker niet opnieuw te bouwen als je je Python code aanpast!
+      - .:/app  
+    # Voert onze nieuwe structuur uit
+    command: python main.py
+
+volumes:
+  pgdata:
+  pgadmin-data:
