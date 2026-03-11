@@ -1,6 +1,7 @@
 from db import get_engine
 from pipelines.elia import run_elia_pipeline
 from pipelines.energie_vlaanderen import run_vlaanderen_pipeline
+from pipelines.combine_data import run_combine_pipeline
 
 if __name__ == "__main__":
     print("Test verbinding met database...")
@@ -14,5 +15,8 @@ if __name__ == "__main__":
     # Voer de pipelines uit
     run_elia_pipeline(engine)
     run_vlaanderen_pipeline(engine)
+
+
+    run_combine_pipeline(engine)
     
     print("\nAlle pipelines zijn afgerond!")
