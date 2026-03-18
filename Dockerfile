@@ -11,3 +11,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # De rest van de code wordt erin gezet via de 'volumes' in docker-compose, 
 # dus we hoeven hier verder niets te kopiëren!
+
+CMD [ "python", "-u", "main.py" ]

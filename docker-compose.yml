@@ -46,8 +46,6 @@ services:
       # Mount je huidige map naar /app in de container. 
       # Zo hoef je Docker niet opnieuw te bouwen als je je Python code aanpast!
       - .:/app  
-    # Voert onze nieuwe structuur uit
-    command: python main.py
 
 volumes:
   pgdata:

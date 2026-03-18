@@ -1,5 +1,6 @@
 import os
 import requests
+from sqlalchemy import inspect  # <-- Toegevoegd
 from config import ELIA_API_BASE
 from utils import fetch_api_data, save_raw_json, load_json_to_df
 from db import write_to_db
@@ -19,11 +20,21 @@ def build_where_clause(date_field: str = "datetime") -> str | None:
         return f"{date_field} >= '{start}' AND {date_field} <= '{end}'"
     return None
 
-def run_elia_pipeline(engine):
+def run_elia_pipeline(engine, force_reload=False):  # <-- Parameter toegevoegd
     print("--- Start Elia Pipeline ---")
+    
+    # Check bestaande tabellen
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+
     for ds_id, (label, table_name) in DATASETS.items():
         print(f"\nVerwerken: {ds_id} ({label})")
         
+        # Sla over als de tabel al bestaat en we niet forceren
+        if not force_reload and table_name in existing_tables:
+            print(f"  Tabel '{table_name}' bestaat al. Data wordt niet opnieuw gedownload.")
+            continue
+            
         # 1. Extract
         url = f"{ELIA_API_BASE}/{ds_id}/exports/json"
         params = {"limit": -1}

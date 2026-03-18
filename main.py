@@ -3,6 +3,7 @@ from pipelines.elia import run_elia_pipeline
 from pipelines.energie_vlaanderen import run_vlaanderen_pipeline
 from pipelines.combine_data import run_combine_pipeline
 from pipelines.kaggle import run_kaggle_pipeline
+from pipelines.export_csv import export_all_tables_to_csv
 
 if __name__ == "__main__":
     print("Test verbinding met database...")
@@ -20,5 +21,8 @@ if __name__ == "__main__":
 
 
     run_combine_pipeline(engine)
+    
+    # Exporteer data naar CSV
+    export_all_tables_to_csv(engine)
     
     print("\nAlle pipelines zijn afgerond!")

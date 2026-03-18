@@ -1,11 +1,14 @@
 import pandas as pd
 from datetime import datetime
+from sqlalchemy import inspect  # <-- Toegevoegd
 from config import VLAANDEREN_URLS, REFNIS_URL, FILTER_START, FILTER_END
 from utils import daterange, fetch_csv_to_df
 from db import write_to_db
 
+# ... [fetch_refnis en melt_energy blijven ongewijzigd] ...
+
 def fetch_refnis() -> pd.DataFrame:
-    """Download de NIS-referentietabel en geef een nis_code → gemeente mapping."""
+    # ... (jouw originele code)
     print("  Downloading NIS-referentietabel ...")
     df = fetch_csv_to_df(REFNIS_URL, sep="|")
     
@@ -20,7 +23,7 @@ def fetch_refnis() -> pd.DataFrame:
     return df.drop_duplicates(subset=["nis_code"])
 
 def melt_energy(df: pd.DataFrame, energy_type: str) -> pd.DataFrame:
-    """Zet de brede tabel (kolommen per gemeente) om naar een database-vriendelijk lang formaat."""
+    # ... (jouw originele code)
     dt_col = df.columns[0]
     nis_cols = df.columns[1:]
 
@@ -35,9 +38,18 @@ def melt_energy(df: pd.DataFrame, energy_type: str) -> pd.DataFrame:
     melted["type"] = energy_type
     return melted
 
-def run_vlaanderen_pipeline(engine):
+def run_vlaanderen_pipeline(engine, force_reload=False):  # <-- Parameter toegevoegd
     print("\n--- Start Energie Vlaanderen Pipeline ---")
     
+    # Check of de data al bestaat
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    target_tables = [f"vlaanderen_energie_{k}" for k in VLAANDEREN_URLS.keys()]
+    
+    if not force_reload and all(t in existing_tables for t in target_tables):
+        print("  Alle Energie Vlaanderen tabellen bestaan al in de DB. Skipping download.")
+        return
+
     start_date = datetime.strptime(FILTER_START, "%Y-%m-%d").date()
     end_date = datetime.strptime(FILTER_END, "%Y-%m-%d").date()
 

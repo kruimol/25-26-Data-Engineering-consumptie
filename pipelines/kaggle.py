@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from sqlalchemy import inspect  # <-- Toegevoegd
 from db import write_to_db
 
 KAGGLE_DIR = Path("data/kaggle")
@@ -92,9 +93,17 @@ def process_private_2022(path):
 # ==============================
 # PIPELINE FUNCTIE
 # ==============================
-def run_kaggle_pipeline(engine):
+def run_kaggle_pipeline(engine, force_reload=False):
     print("\n--- Start Kaggle Pipeline ---")
     
+    # Check of de tabellen al bestaan
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    
+    if not force_reload and "kaggle_district_raw" in existing_tables and "kaggle_private_raw" in existing_tables:
+        print("  Kaggle tabellen bestaan al in de DB. Skipping verwerking.")
+        return
+
     # Paden
     d21_path = KAGGLE_DIR / "2021_ElectricPower_15min.csv"
     d22_path = KAGGLE_DIR / "2022_ElectricPower_15min.csv"
