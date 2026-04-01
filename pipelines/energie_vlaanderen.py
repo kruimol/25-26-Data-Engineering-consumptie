@@ -1,14 +1,76 @@
 import pandas as pd
-from datetime import datetime
-from sqlalchemy import inspect  # <-- Toegevoegd
-from config import VLAANDEREN_URLS, REFNIS_URL, FILTER_START, FILTER_END
-from utils import daterange, fetch_csv_to_df
-from db import write_to_db
+import requests
+from io import StringIO
+from datetime import datetime, timedelta
+from sqlalchemy import inspect
 
-# ... [fetch_refnis en melt_energy blijven ongewijzigd] ...
+# =====================================================================
+# 1. CONFIGURATIE (Voorheen in config.py)
+# =====================================================================
+VLAANDEREN_URLS = {
+    "solar": "https://admiring-leakey-15793c.netlify.app/data/realtime/realtime_solar_{date}.csv",
+    "wind": "https://admiring-leakey-15793c.netlify.app/data/realtime/realtime_wind_{date}.csv",
+    "capacity_solar": "https://admiring-leakey-15793c.netlify.app/data/realtime/installed_capacity_solar_{date}.csv",
+    "capacity_wind": "https://admiring-leakey-15793c.netlify.app/data/realtime/installed_capacity_wind_{date}.csv"
+}
 
+REFNIS_URL = "https://statbel.fgov.be/sites/default/files/Over_Statbel_FR/Nomenclaturen/REFNIS_2025.csv"
+
+FILTER_START = "2026-02-01"
+FILTER_END = "2026-02-10"
+
+# =====================================================================
+# 2. HULPFUNCTIES (Voorheen in utils.py en db.py)
+# =====================================================================
+def daterange(start, end):
+    """Genereert datums voor de for-loop."""
+    d = start
+    while d <= end:
+        yield d
+        d += timedelta(days=1)
+
+def fetch_csv_to_df(url: str, sep: str = ",") -> pd.DataFrame | None:
+    """Downloadt CSV-data van een URL en vangt netwerk- en encodingfouten op."""
+    try:
+        resp = requests.get(url, timeout=30)
+    except requests.RequestException as exc:
+        print(f"    Fout bij ophalen {url}: {exc}")
+        return None
+        
+    if resp.status_code == 404:
+        return None
+        
+    resp.raise_for_status()
+
+    # Fallback voor verschillende encodings (vooral nodig voor het REFNIS bestand)
+    decoded = None
+    for enc in ("utf-8", "cp1252", "latin-1"):
+        try:
+            decoded = resp.content.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+            
+    if decoded is None:
+        decoded = resp.content.decode("utf-8", errors="replace")
+
+    dtype = str if sep == "|" else None
+    return pd.read_csv(StringIO(decoded), sep=sep, dtype=dtype)
+
+def write_to_db(engine, df: pd.DataFrame, table_name: str):
+    """Schrijft de DataFrame weg naar de database."""
+    try:
+        # if_exists="replace" overschrijft de tabel. 
+        # Verander dit naar "append" als je nieuwe dagen wilt toevoegen aan een bestaande tabel.
+        df.to_sql(table_name, engine, if_exists="replace", index=False)
+        print(f"    Succesvol {len(df)} rijen weggeschreven naar tabel '{table_name}'.")
+    except Exception as e:
+        print(f"    Fout bij wegschrijven naar DB: {e}")
+
+# =====================================================================
+# 3. HOOFDLOGICA (Jouw opgeschoonde pipeline)
+# =====================================================================
 def fetch_refnis() -> pd.DataFrame:
-    # ... (jouw originele code)
     print("  Downloading NIS-referentietabel ...")
     df = fetch_csv_to_df(REFNIS_URL, sep="|")
     
@@ -23,7 +85,6 @@ def fetch_refnis() -> pd.DataFrame:
     return df.drop_duplicates(subset=["nis_code"])
 
 def melt_energy(df: pd.DataFrame, energy_type: str) -> pd.DataFrame:
-    # ... (jouw originele code)
     dt_col = df.columns[0]
     nis_cols = df.columns[1:]
 
@@ -38,10 +99,10 @@ def melt_energy(df: pd.DataFrame, energy_type: str) -> pd.DataFrame:
     melted["type"] = energy_type
     return melted
 
-def run_vlaanderen_pipeline(engine, force_reload=False):  # <-- Parameter toegevoegd
+def run_vlaanderen_pipeline(engine, force_reload=False):
     print("\n--- Start Energie Vlaanderen Pipeline ---")
     
-    # Check of de data al bestaat
+    # Check of de data al bestaat (Hergebruik / Skip logic)
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
     target_tables = [f"vlaanderen_energie_{k}" for k in VLAANDEREN_URLS.keys()]
