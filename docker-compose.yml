@@ -1,19 +1,39 @@
+version: '3.8'
+
+x-airflow-common-env:
+  &airflow-common-env
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${PGUSER}:${PGPASSWORD}@db:5432/${PGDATABASE}
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+  PGHOST: db
+  PYTHONPATH: /opt/airflow/dags/repo
+
+x-airflow-common:
+  &airflow-common
+  build: .
+  user: "${AIRFLOW_UID:-1000}:0"
+  env_file: .env
+  environment:
+    <<: *airflow-common-env
+  depends_on:
+    db:
+      condition: service_healthy
+  volumes:
+    - .:/opt/airflow/dags/repo
+
 services:
   db:
     image: postgres:16-alpine
     container_name: energie_db
     restart: always
     env_file: .env
-    # We koppelen jouw PG variabelen aan de variabelen die de Postgres container verwacht
     environment:
       POSTGRES_USER: ${PGUSER}
       POSTGRES_PASSWORD: ${PGPASSWORD}
       POSTGRES_DB: ${PGDATABASE}
-    # ports:
-    #   - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # Zorgt ervoor dat de app pas start als de database écht klaar is om connecties te ontvangen
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE}"]
       interval: 5s
@@ -25,27 +45,53 @@ services:
     container_name: energie_pgadmin
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file: .env
     ports:
-      - "5050:80" # Je pgAdmin is straks bereikbaar op http://localhost:5050
+      - "5050:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
-  app:
-    build: .
-    container_name: energie_pipeline
-    env_file: .env
-    # Overschrijf de host zodat de app binnen het Docker netwerk naar 'db' zoekt ipv 'localhost'
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init
+    command: version
     environment:
-      - PGHOST=db
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+      _AIRFLOW_WWW_USER_ROLE: Admin
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      # Mount je huidige map naar /app in de container. 
-      # Zo hoef je Docker niet opnieuw te bouwen als je je Python code aanpast!
-      - .:/app  
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: scheduler
+    depends_on:
+      db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

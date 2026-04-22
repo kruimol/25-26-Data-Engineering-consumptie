@@ -27,6 +27,6 @@ if __name__ == "__main__":
     export_all_tables_to_csv(engine)
     
     # NIEUW: Exporteer de master tabel naar Azure
-    export_master_to_azure(engine)
+    # export_master_to_azure(engine)
     
     print("\nAlle pipelines zijn afgerond!")

@@ -12,7 +12,7 @@ DB_URL = (
 )
 
 # Mappen
-DATA_DIR = Path("data")
+DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
 # API & URL Instellingen
